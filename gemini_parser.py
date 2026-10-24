@@ -1,3 +1,8 @@
+import json
+from typing import Dict, Any
+from config import GEMINI_API_KEY, GEMINI_MODEL
+from logger import app_logger
+
 # Valid actions as specified in the architecture
 VALID_ACTIONS = {
     "play_youtube_video",
@@ -41,3 +46,42 @@ You MUST respond strictly with valid JSON conforming to this schema:
 }
 Do NOT output any markdown fences, thoughts, or commentary. Only the raw JSON object.
 """
+
+class IntentParser:
+    """
+    Interfaces with the Google Gemini API to parse voice input into structured JSON actions.
+    """
+    def __init__(self, api_key: str = None, model_name: str = None):
+        self.api_key = api_key or GEMINI_API_KEY
+        self.model_name = model_name or GEMINI_MODEL
+        self._model = None
+        self._initialized = False
+
+    def _ensure_initialized(self):
+        if self._initialized:
+            return
+
+        if not self.api_key or self.api_key == "your_gemini_api_key_here":
+            raise ValueError(
+                "Gemini API Key is missing or default placeholder. "
+                "Please set GEMINI_API_KEY in your .env file."
+            )
+
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=self.api_key)
+
+            # Configure GenerativeModel with JSON response mime type
+            self._model = genai.GenerativeModel(
+                model_name=self.model_name,
+                system_instruction=SYSTEM_INSTRUCTION,
+                generation_config=genai.types.GenerationConfig(
+                    response_mime_type="application/json",
+                    temperature=0.0,
+                )
+            )
+            self._initialized = True
+            app_logger.info(f"Gemini Intent Parser initialized with model: {self.model_name}")
+        except Exception as e:
+            app_logger.error(f"Failed to initialize Gemini API: {e}", exc_info=True)
+            raise
