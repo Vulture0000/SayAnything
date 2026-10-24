@@ -1,4 +1,5 @@
 import sys
+import threading
 import tkinter as tk
 from typing import Optional
 
@@ -72,7 +73,40 @@ class VoiceAutomationApp:
             self.ui.show_window()
 
     def _dispatch_command_processing(self, spoken_text: str):
-        pass
+        """
+        Runs the Gemini API parsing and intent execution in a separate daemon thread
+        so the Tkinter main thread is never blocked.
+        """
+        worker_thread = threading.Thread(
+            target=self._command_worker,
+            args=(spoken_text,),
+            daemon=True,
+            name="IntentExecutionWorker"
+        )
+        worker_thread.start()
+
+    def _command_worker(self, text: str):
+        """
+        Worker thread routine: parses intent with Gemini, then executes the target action.
+        """
+        try:
+            app_logger.info(f"Processing command: \"{text}\"")
+            if not self.parser:
+                self.parser = IntentParser()
+
+            intent = self.parser.parse_intent(text)
+            action = intent.get("action", "unsupported")
+            target = intent.get("target", "")
+
+            # Execute
+            success = execute_intent(intent)
+            if success:
+                app_logger.info(f"Successfully executed action '{action}' for: \"{target}\"")
+            else:
+                app_logger.warning(f"Execution completed with notice/failure for action '{action}'.")
+
+        except Exception as e:
+            app_logger.error(f"Error processing command worker for '{text}': {e}", exc_info=True)
 
     def run(self):
         """
