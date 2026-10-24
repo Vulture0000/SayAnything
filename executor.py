@@ -2,8 +2,11 @@ import re
 import urllib.parse
 import urllib.request
 import webbrowser
+import subprocess
+from pathlib import Path
 from typing import Dict, Any
 
+from config import VSCODE_COMMAND
 from logger import app_logger
 
 # User agent for YouTube scraping
@@ -54,6 +57,7 @@ def play_youtube_video(target: str) -> bool:
         webbrowser.open(search_url)
         return True
 
+
 def search_youtube(target: str) -> bool:
     """
     Opens YouTube search results page for the specified query.
@@ -70,6 +74,33 @@ def search_youtube(target: str) -> bool:
     webbrowser.open(url)
     return True
 
+
+def open_vscode(target: str) -> bool:
+    """
+    Launches Visual Studio Code using subprocess.
+    If target specifies a directory or file, opens that specific path in VS Code.
+    """
+    path_target = (target or "").strip()
+    app_logger.info(f"Launching VS Code with target: '{path_target or 'default'}'")
+
+    cmd = VSCODE_COMMAND or "code"
+
+    try:
+        if path_target:
+            # Expand environment variables or ~ user path if present
+            expanded_path = os_expanded_path(path_target)
+            # Run code "<path>" via shell so Windows finds code.cmd in PATH
+            subprocess.Popen(f'{cmd} "{expanded_path}"', shell=True)
+        else:
+            # Just launch code
+            subprocess.Popen(cmd, shell=True)
+        app_logger.info("VS Code launch command dispatched successfully.")
+        return True
+    except Exception as e:
+        app_logger.error(f"Failed to open VS Code: {e}", exc_info=True)
+        return False
+
+
 def search_web(target: str) -> bool:
     """
     Executes a Google web search in the default browser for the target query.
@@ -85,3 +116,14 @@ def search_web(target: str) -> bool:
     url = f"https://www.google.com/search?q={encoded_query}"
     webbrowser.open(url)
     return True
+
+
+def os_expanded_path(raw_path: str) -> str:
+    """
+    Helper to expand user home directories and environment variables for local paths.
+    """
+    try:
+        p = Path(raw_path).expanduser()
+        return str(p.resolve() if p.exists() else raw_path)
+    except Exception:
+        return raw_path
