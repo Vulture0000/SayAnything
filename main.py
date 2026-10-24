@@ -1,10 +1,12 @@
 import sys
+import time
+import signal
 import threading
 import tkinter as tk
 from typing import Optional
 
 import keyboard
-from config import TRIGGER_HOTKEY, EXIT_HOTKEY
+from config import TRIGGER_HOTKEY, EXIT_HOTKEY, GEMINI_API_KEY
 from logger import app_logger
 from gemini_parser import IntentParser
 from executor import execute_intent
@@ -29,10 +31,14 @@ class VoiceAutomationApp:
         app_logger.info("Initializing Voice-Controlled OS Automation (SayAnything)")
         app_logger.info("=" * 60)
 
+        # Initialize Intent Parser
         try:
             self.parser = IntentParser()
         except Exception as e:
-            app_logger.warning(f"IntentParser warning during init: {e}")
+            app_logger.warning(
+                f"IntentParser warning during init: {e}. "
+                "The application will still run, but commands will fail if GEMINI_API_KEY is not set."
+            )
 
         # Initialize Tkinter root on the main thread
         self.root = tk.Tk()
@@ -43,11 +49,16 @@ class VoiceAutomationApp:
             on_submit=self._dispatch_command_processing
         )
 
-        # Register Global Trigger Hotkey
+        # Register Global Hotkeys
         self._register_hotkeys()
+
+        # Handle SIGINT / SIGTERM for clean shutdown when running in terminal
+        signal.signal(signal.SIGINT, lambda sig, frame: self.root.after(0, self.shutdown))
+        signal.signal(signal.SIGTERM, lambda sig, frame: self.root.after(0, self.shutdown))
 
         self._is_running = True
         app_logger.info(f"System Ready! Press '{TRIGGER_HOTKEY.upper()}' to trigger voice input.")
+        app_logger.info(f"Press '{EXIT_HOTKEY.upper()}' at any time to gracefully exit.")
 
     def _register_hotkeys(self):
         """
@@ -55,14 +66,29 @@ class VoiceAutomationApp:
         Thread-safe: schedules GUI actions back to Tkinter's main thread via root.after.
         """
         try:
+            # Global trigger hotkey (e.g. Ctrl+Alt+Space)
             keyboard.add_hotkey(
                 TRIGGER_HOTKEY,
                 lambda: self.root.after(0, self._on_trigger_hotkey_pressed),
                 suppress=False
             )
             app_logger.info(f"Registered trigger hotkey: '{TRIGGER_HOTKEY}'")
+
+            # Graceful exit hotkey (e.g. Ctrl+Shift+Q)
+            keyboard.add_hotkey(
+                EXIT_HOTKEY,
+                lambda: self.root.after(0, self.shutdown),
+                suppress=False
+            )
+            app_logger.info(f"Registered graceful exit hotkey: '{EXIT_HOTKEY}'")
+
         except Exception as e:
-            app_logger.error(f"Failed to register global hotkey: {e}", exc_info=True)
+            app_logger.error(
+                f"Failed to register global hotkey: {e}. "
+                "Note: On Windows, global keyboard hooks may require Administrator privileges "
+                "if interacting with elevated application windows.",
+                exc_info=True
+            )
 
     def _on_trigger_hotkey_pressed(self):
         """
@@ -116,11 +142,43 @@ class VoiceAutomationApp:
             self.root.mainloop()
         except KeyboardInterrupt:
             app_logger.info("KeyboardInterrupt received.")
+        finally:
+            self.shutdown()
+
+    def shutdown(self):
+        """
+        Performs a clean, graceful shutdown of the application.
+        """
+        if not self._is_running:
+            return
+
+        self._is_running = False
+        app_logger.info("Shutting down Voice-Controlled OS Automation...")
+
+        # Unhook global keyboard listeners
+        try:
+            keyboard.unhook_all_hotkeys()
+            app_logger.debug("Keyboard hotkeys successfully unhooked.")
+        except Exception as e:
+            app_logger.debug(f"Notice while unhooking keyboard: {e}")
+
+        # Destroy Tkinter window
+        try:
+            if self.root:
+                self.root.quit()
+                self.root.destroy()
+        except Exception as e:
+            app_logger.debug(f"Notice while destroying UI: {e}")
+
+        app_logger.info("Application exited cleanly. Goodbye!")
+        sys.exit(0)
+
 
 def main():
     app = VoiceAutomationApp()
     app.initialize()
     app.run()
+
 
 if __name__ == "__main__":
     main()
