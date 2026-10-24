@@ -2,6 +2,7 @@ import sys
 import tkinter as tk
 from typing import Optional
 
+import keyboard
 from config import TRIGGER_HOTKEY, EXIT_HOTKEY
 from logger import app_logger
 from gemini_parser import IntentParser
@@ -21,7 +22,7 @@ class VoiceAutomationApp:
 
     def initialize(self):
         """
-        Initializes UI, intent parser, and application state.
+        Initializes UI, intent parser, and registers global hotkeys.
         """
         app_logger.info("=" * 60)
         app_logger.info("Initializing Voice-Controlled OS Automation (SayAnything)")
@@ -41,7 +42,34 @@ class VoiceAutomationApp:
             on_submit=self._dispatch_command_processing
         )
 
+        # Register Global Trigger Hotkey
+        self._register_hotkeys()
+
         self._is_running = True
+        app_logger.info(f"System Ready! Press '{TRIGGER_HOTKEY.upper()}' to trigger voice input.")
+
+    def _register_hotkeys(self):
+        """
+        Hooks global shortcuts via the `keyboard` module.
+        Thread-safe: schedules GUI actions back to Tkinter's main thread via root.after.
+        """
+        try:
+            keyboard.add_hotkey(
+                TRIGGER_HOTKEY,
+                lambda: self.root.after(0, self._on_trigger_hotkey_pressed),
+                suppress=False
+            )
+            app_logger.info(f"Registered trigger hotkey: '{TRIGGER_HOTKEY}'")
+        except Exception as e:
+            app_logger.error(f"Failed to register global hotkey: {e}", exc_info=True)
+
+    def _on_trigger_hotkey_pressed(self):
+        """
+        Invoked on main thread when trigger hotkey is pressed.
+        """
+        app_logger.info(f"Global hotkey '{TRIGGER_HOTKEY}' detected. Activating Voice Bar.")
+        if self.ui:
+            self.ui.show_window()
 
     def _dispatch_command_processing(self, spoken_text: str):
         pass
