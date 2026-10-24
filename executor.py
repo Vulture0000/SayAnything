@@ -3,6 +3,7 @@ import urllib.parse
 import urllib.request
 import webbrowser
 import subprocess
+import shutil
 from pathlib import Path
 from typing import Dict, Any
 
@@ -39,6 +40,7 @@ def play_youtube_video(target: str) -> bool:
             html = response.read().decode("utf-8", errors="ignore")
 
         # Find the first video ID pattern (/watch?v=xxxxxxxxxxx)
+        # We look for 11-character video IDs common to YouTube
         video_ids = re.findall(r"/watch\?v=([a-zA-Z0-9_-]{11})", html)
 
         if video_ids:
@@ -127,3 +129,32 @@ def os_expanded_path(raw_path: str) -> str:
         return str(p.resolve() if p.exists() else raw_path)
     except Exception:
         return raw_path
+
+
+def execute_intent(intent_data: Dict[str, Any]) -> bool:
+    """
+    Routes parsed intent JSON to the corresponding execution function.
+    """
+    action = intent_data.get("action", "unsupported")
+    target = intent_data.get("target", "")
+
+    app_logger.info(f"Routing action: '{action}' with target: '{target}'")
+
+    try:
+        if action == "play_youtube_video":
+            return play_youtube_video(target)
+        elif action == "search_youtube":
+            return search_youtube(target)
+        elif action == "open_vscode":
+            return open_vscode(target)
+        elif action == "search_web":
+            return search_web(target)
+        elif action == "unsupported":
+            app_logger.warning(f"Action '{action}' is not supported or not recognized. Target: '{target}'")
+            return False
+        else:
+            app_logger.error(f"Unrecognized action '{action}'. No execution handler available.")
+            return False
+    except Exception as e:
+        app_logger.error(f"Execution failed for action '{action}': {e}", exc_info=True)
+        return False
