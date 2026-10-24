@@ -1,3 +1,5 @@
+import sys
+import ctypes
 import tkinter as tk
 from typing import Callable, Optional
 
@@ -17,6 +19,7 @@ class VoiceInputWindow:
         self.is_visible = False
 
         self._setup_window()
+        self.hide_window()
 
     def _setup_window(self):
         self.root.title("SayAnything Voice Bar")
@@ -30,3 +33,28 @@ class VoiceInputWindow:
         x = (screen_width - UI_WIDTH) // 2
         y = int(screen_height * 0.22)
         self.root.geometry(f"{UI_WIDTH}x{UI_HEIGHT}+{x}+{y}")
+
+    def _force_focus(self):
+        """
+        Forces Windows foreground focus to the borderless window and entry widget.
+        """
+        try:
+            self.root.focus_force()
+
+            # Extra measure for Windows OS to ensure foreground activation
+            if sys.platform == "win32":
+                hwnd = self.root.winfo_id()
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+                ctypes.windll.user32.BringWindowToTop(hwnd)
+        except Exception as e:
+            app_logger.debug(f"Focus forcing notice: {e}")
+
+    def hide_window(self):
+        """
+        Hides the window and clears state.
+        """
+        self.is_visible = False
+        try:
+            self.root.withdraw()
+        except Exception as e:
+            app_logger.debug(f"Error while hiding window: {e}")
