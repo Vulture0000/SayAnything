@@ -1,5 +1,7 @@
 import sys
+import time
 import ctypes
+import threading
 import tkinter as tk
 from typing import Callable, Optional
 
@@ -24,6 +26,9 @@ class VoiceInputWindow:
 
         self._setup_window()
         self._build_widgets()
+        self._bind_events()
+
+        # Start hidden
         self.hide_window()
 
     def _setup_window(self):
@@ -125,6 +130,57 @@ class VoiceInputWindow:
         )
         self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
+    def _bind_events(self):
+        # Pressing Enter triggers submission
+        self.entry.bind("<Return>", self._handle_return)
+        self.root.bind("<Return>", self._handle_return)
+
+        # Pressing Escape cancels and hides
+        self.root.bind("<Escape>", lambda event: self.hide_window())
+
+    def show_window(self):
+        """
+        Pops up the window, forces focus to the text field,
+        and optionally triggers the Wispr Flow shortcut.
+        """
+        if self.is_visible:
+            # Already visible, re-assert focus
+            self._force_focus()
+            return
+
+        app_logger.debug("Showing voice input window...")
+        self.is_visible = True
+
+        # Clear any leftover text
+        self.entry_var.set("")
+
+        # Deiconify and configure topmost
+        self.root.deiconify()
+        self.root.lift()
+        self.root.attributes("-topmost", True)
+
+        self._force_focus()
+
+        # Schedule Wispr Flow hotkey simulation slightly after focus is established
+        if AUTO_TRIGGER_WISPR:
+            self.root.after(80, self._simulate_wispr_trigger)
+
+    def _force_focus(self):
+        """
+        Forces Windows foreground focus to the borderless window and entry widget.
+        """
+        try:
+            self.root.focus_force()
+            self.entry.focus_set()
+
+            # Extra measure for Windows OS to ensure foreground activation
+            if sys.platform == "win32":
+                hwnd = self.root.winfo_id()
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+                ctypes.windll.user32.BringWindowToTop(hwnd)
+        except Exception as e:
+            app_logger.debug(f"Focus forcing notice: {e}")
+
     def _simulate_wispr_trigger(self):
         """
         Programmatically triggers the Wispr Flow dictation shortcut.
@@ -140,22 +196,6 @@ class VoiceInputWindow:
         except Exception as e:
             app_logger.error(f"Failed to simulate Wispr Flow hotkey '{WISPR_HOTKEY}': {e}", exc_info=True)
 
-    def _force_focus(self):
-        """
-        Forces Windows foreground focus to the borderless window and entry widget.
-        """
-        try:
-            self.root.focus_force()
-            if hasattr(self, 'entry'):
-                self.entry.focus_set()
-
-            if sys.platform == "win32":
-                hwnd = self.root.winfo_id()
-                ctypes.windll.user32.SetForegroundWindow(hwnd)
-                ctypes.windll.user32.BringWindowToTop(hwnd)
-        except Exception as e:
-            app_logger.debug(f"Focus forcing notice: {e}")
-
     def hide_window(self):
         """
         Hides the window and clears state.
@@ -165,3 +205,19 @@ class VoiceInputWindow:
             self.root.withdraw()
         except Exception as e:
             app_logger.debug(f"Error while hiding window: {e}")
+
+    def _handle_return(self, event=None):
+        """
+        Handles Enter key / newline transcription.
+        Retrieves text, hides the window, and invokes on_submit callback.
+        """
+        raw_text = self.entry_var.get().strip()
+        self.hide_window()
+
+        if raw_text:
+            app_logger.info(f"Captured input from voice window: '{raw_text}'")
+            if self.on_submit:
+                # Dispatch submission
+                self.on_submit(raw_text)
+        else:
+            app_logger.info("Empty input submitted. Ignoring.")
