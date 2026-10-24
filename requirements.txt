@@ -1,0 +1,5 @@
+# Core dependencies for SayAnything OS Automation
+google-generativeai>=0.8.0
+python-dotenv>=1.0.0
+keyboard>=0.13.5
+pyautogui>=0.9.54
