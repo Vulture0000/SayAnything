@@ -3,11 +3,12 @@ import ctypes
 import tkinter as tk
 from typing import Callable, Optional
 
+import pyautogui
 from config import (
     UI_WIDTH, UI_HEIGHT, UI_BG_COLOR, UI_CARD_BG,
     UI_ACCENT_COLOR, UI_TEXT_COLOR, UI_MUTED_TEXT,
     UI_BORDER_COLOR, UI_FONT_FAMILY, UI_FONT_SIZE,
-    WISPR_HOTKEY
+    WISPR_HOTKEY, AUTO_TRIGGER_WISPR
 )
 from logger import app_logger
 
@@ -123,6 +124,21 @@ class VoiceInputWindow:
             bd=0
         )
         self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+    def _simulate_wispr_trigger(self):
+        """
+        Programmatically triggers the Wispr Flow dictation shortcut.
+        """
+        if not WISPR_HOTKEY:
+            return
+
+        try:
+            keys = [k.strip() for k in WISPR_HOTKEY.split("+") if k.strip()]
+            if keys:
+                app_logger.info(f"Simulating Wispr Flow hotkey: '{WISPR_HOTKEY}'")
+                pyautogui.hotkey(*keys)
+        except Exception as e:
+            app_logger.error(f"Failed to simulate Wispr Flow hotkey '{WISPR_HOTKEY}': {e}", exc_info=True)
 
     def _force_focus(self):
         """
