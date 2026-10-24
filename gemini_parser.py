@@ -85,3 +85,51 @@ class IntentParser:
         except Exception as e:
             app_logger.error(f"Failed to initialize Gemini API: {e}", exc_info=True)
             raise
+
+    def parse_intent(self, text: str) -> Dict[str, Any]:
+        """
+        Sends the transcribed voice text to Gemini and parses the structured JSON response.
+        Returns a dict with 'action' and 'target'.
+        """
+        cleaned_text = (text or "").strip()
+        if not cleaned_text:
+            return {"action": "unsupported", "target": "Empty voice input"}
+
+        try:
+            self._ensure_initialized()
+            app_logger.info(f"Sending prompt to Gemini: '{cleaned_text}'")
+
+            response = self._model.generate_content(cleaned_text)
+            response_text = (response.text or "").strip()
+            app_logger.debug(f"Gemini raw response: {response_text}")
+
+            # Parse JSON
+            parsed_data = json.loads(response_text)
+
+            action = parsed_data.get("action", "unsupported")
+            target = parsed_data.get("target", "")
+
+            # Sanitize and validate
+            if action not in VALID_ACTIONS:
+                app_logger.warning(f"Unknown action '{action}' returned from Gemini, falling back to unsupported.")
+                action = "unsupported"
+
+            if not isinstance(target, str):
+                target = str(target)
+
+            result = {
+                "action": action,
+                "target": target.strip()
+            }
+            app_logger.info(f"Parsed intent: action='{result['action']}', target='{result['target']}'")
+            return result
+
+        except ValueError as ve:
+            app_logger.error(f"Configuration Error: {ve}")
+            return {"action": "unsupported", "target": f"Config Error: {ve}"}
+        except json.JSONDecodeError as jde:
+            app_logger.error(f"Failed to parse JSON from Gemini response: {jde}", exc_info=True)
+            return {"action": "unsupported", "target": f"JSON Decode Error: {jde}"}
+        except Exception as e:
+            app_logger.error(f"Unexpected error during intent parsing: {e}", exc_info=True)
+            return {"action": "unsupported", "target": f"Gemini Error: {e}"}
